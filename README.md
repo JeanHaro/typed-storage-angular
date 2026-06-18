@@ -228,7 +228,9 @@ storage.clear();
 ## 🔗 Related
 
 - **[@jeanharo98/typed-storage](https://github.com/JeanHaro/typed-storage)** — Core library (required peer dependency)
-- **[@jeanharo98/typed-storage-reac](https://github.com/JeanHaro/typed-storage-react)** — React wrapper 
+- **[@jeanharo98/typed-storage-react](https://github.com/JeanHaro/typed-storage-react)** — React wrapper 
+- **[typed-storage-devtools](https://github.com/JeanHaro/typed-storage-devtools)** — Chrome DevTools extension for real-time inspection |
+
 
 ---
 
