@@ -1,6 +1,6 @@
 {
   "name": "@jeanharo98/typed-storage-angular",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Angular wrapper for @jeanharo98/typed-storage with native Signals support",
   "main": "dist/index.js",
   "scripts": {
