@@ -20,6 +20,8 @@ import {
 type SignalStorage<T extends StorageSchema> = Record<keyof T, Signal<any>> & {
     set(key: keyof T, value: any): void;
     reset(key: keyof T): void;
+    remove(key: keyof T): void;
+    has(key: keyof T): boolean;  
     clear(): void;
 }
 
@@ -63,13 +65,21 @@ export class TypedStorageService<T extends StorageSchema> {
             this._signals[key].set(this._storage[key]()); // Actualizamos el signal
         }
 
+        result.remove = ( key: keyof T ) => {
+            this._storage[key].remove(); // borra del localStorage
+            this._signals[key].set(undefined); // Signal queda undefined
+        }
+        
+        result.has = (key: keyof T): boolean => {
+            return this._storage[key].has();
+        };
+
         result.clear = () => {
             this._storage.clear(); // Limpiamos el storage
             for ( const k of Object.keys(schema) ) {
                 this._signals[k].set(this._storage[k]()); // Actualizamos todos los signals
             }
         }
-        
 
         // 4. Retorna el resultado
         return result as SignalStorage<T>;

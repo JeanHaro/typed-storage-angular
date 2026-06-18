@@ -59,6 +59,8 @@ interface AppStorage {
     sidebarOpen: Signal<boolean>;
     set(key: string, value: any): void;
     reset(key: string): void;
+    remove(key: string): void;
+    has(key: string): boolean;
     clear(): void;
 }
 ```
@@ -101,10 +103,12 @@ import { StorageService } from './storage.service';
         <p>Theme: {{ storageService.storage.theme() }}</p>
         <p>Language: {{ storageService.storage.language() }}</p>
         <p>FontSize: {{ storageService.storage.fontSize() }}</p>
+        <p>¿Tiene theme? {{ storageService.storage.has('theme') }}</p>
 
         <button (click)="storageService.storage.set('theme', 'light')">Light</button>
         <button (click)="storageService.storage.set('theme', 'dark')">Dark</button>
         <button (click)="storageService.storage.reset('theme')">Reset</button>
+        <button (click)="storageService.storage.remove('theme')">Remove Theme</button>
         <button (click)="storageService.storage.clear()">Clear All</button>
     `
 })
@@ -154,32 +158,11 @@ TypedStorageService.initialize()
         ├── theme()          ← Signal getter
         ├── language()       ← Signal getter
         ├── set(key, value)  ← updates storage + Signal
-        ├── reset(key)       ← resets storage + Signal
-        └── clear()          ← clears all keys + Signals
+        ├── reset(key)       ← resets to initialValue + updates Signal
+        ├── remove(key)      ← removes key from storage + sets Signal to undefined
+        ├── has(key)         ← checks if key exists in storage
+        └── clear()          ← clears all keys + updates all Signals
 ```
-
-When `set('theme', 'light')` is called:
-1. Updates `localStorage['app:theme']`
-2. Updates the Angular Signal
-3. Template re-renders automatically
-
-When another tab changes the value (with `sync: true`):
-1. `StorageEvent` fires
-2. `onChange()` callback updates the Signal
-3. Template re-renders automatically
-
----
-
-## 🆚 Comparison
-
-| Feature | Manual approach | typed-storage-angular |
-|---------|----------------|----------------------|
-| localStorage persistence | ✅ manual | ✅ automatic |
-| Angular Signal | ✅ manual `signal()` | ✅ automatic |
-| Cross-tab sync | ❌ manual `StorageEvent` | ✅ automatic |
-| TTL / expiration | ❌ manual | ✅ built-in |
-| Type safety | ⚠️ partial | ✅ full |
-| Prefix namespacing | ❌ manual | ✅ built-in |
 
 ---
 
@@ -196,7 +179,49 @@ Creates a storage object with Angular Signals.
 | `schema` | `StorageSchema` | Object with keys and initial values |
 | `options` | `StorageSignalOptions` | Optional configuration |
 
-Returns an object where each key is a `Signal<T>`, plus `set()`, `reset()`, and `clear()` methods.
+Returns an object where each key is a `Signal<T>`, plus the following methods:
+
+#### Methods
+
+| Method | Description |
+|--------|-------------|
+| `set(key, value)` | Updates the value in storage and syncs the Signal |
+| `reset(key)` | Resets to `initialValue` in storage and syncs the Signal |
+| `remove(key)` | Removes the key from localStorage and sets Signal to `undefined` |
+| `has(key)` | Returns `true` if the key exists in storage |
+| `clear()` | Calls `reset()` on all keys and syncs all Signals |
+
+#### Difference between `reset()`, `remove()` and `clear()`
+
+```typescript
+// reset(key) — vuelve al initialValue pero mantiene la key en localStorage
+storage.reset('theme');
+// localStorage['app:theme'] = '"dark"' — sigue existiendo
+// storage.theme() → 'dark' (initialValue)
+
+// remove(key) — borra la key del localStorage completamente
+storage.remove('theme');
+// localStorage['app:theme'] — ya no existe
+// storage.theme() → undefined
+
+// clear() — reset() en todas las keys del schema
+storage.clear();
+// todas las keys vuelven a su initialValue
+```
+
+---
+
+## 🆚 Comparison
+
+| Feature | Manual approach | typed-storage-angular |
+|---------|----------------|----------------------|
+| localStorage persistence | ✅ manual | ✅ automatic |
+| Angular Signal | ✅ manual `signal()` | ✅ automatic |
+| Cross-tab sync | ❌ manual `StorageEvent` | ✅ automatic |
+| TTL / expiration | ❌ manual | ✅ built-in |
+| Type safety | ⚠️ partial | ✅ full |
+| Prefix namespacing | ❌ manual | ✅ built-in |
+| Lines of code (4 keys) | ~25 lines | ~5 lines |
 
 ---
 

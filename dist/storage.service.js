@@ -39,6 +39,13 @@ export class TypedStorageService {
             this._storage[key].reset(); // Reseteamos el storage
             this._signals[key].set(this._storage[key]()); // Actualizamos el signal
         };
+        result.remove = (key) => {
+            this._storage[key].remove(); // borra del localStorage
+            this._signals[key].set(undefined); // Signal queda undefined
+        };
+        result.has = (key) => {
+            return this._storage[key].has();
+        };
         result.clear = () => {
             this._storage.clear(); // Limpiamos el storage
             for (const k of Object.keys(schema)) {
