@@ -29,7 +29,8 @@ export class StorageService {
 - **Automatic sync** — `onChange()` updates Signals when storage changes
 - **Zoneless compatible** — works with Angular 22+ zoneless change detection
 - **Type-safe** — full TypeScript support with your own interfaces
-- **All typed-storage features** — TTL, cross-tab sync, prefix, sessionStorage, MemoryStorage fallback
+- **`trackRoute()`** — automatic route-based value sync via Angular Router
+- **All typed-storage features** — TTL, cross-tab sync, prefix, sessionStorage, MemoryStorage fallback, `destroy()`, `batch()`, `routeOverrides`
 
 ---
 
@@ -41,7 +42,7 @@ npm install @jeanharo98/typed-storage @jeanharo98/typed-storage-angular
 pnpm add @jeanharo98/typed-storage @jeanharo98/typed-storage-angular
 ```
 
-> Both packages are required — `@jeanharo98/typed-storage` is a peer dependency.
+> Both packages are required — `@jeanharo98/typed-storage` is a peer dependency. `@angular/router` is required only if you use `trackRoute()`.
 
 ---
 
@@ -62,6 +63,8 @@ interface AppStorage {
     remove(key: string): void;
     has(key: string): boolean;
     clear(): void;
+    destroy(): void;
+    setRoute(route: string): void;
 }
 ```
 
@@ -119,6 +122,61 @@ export class App {
 
 ---
 
+## 🗑️ Scoped storage with `destroy()`
+
+Same as the core library — completely removes all schema keys, useful for data that should only exist while a specific page/component is active:
+
+```typescript
+@Component({ selector: 'app-products' })
+export class ProductsComponent implements OnDestroy {
+    storageService = inject(StorageService);
+
+    ngOnDestroy(): void {
+        this.storageService.storage.destroy();
+        // → all keys removed from localStorage when leaving this component
+    }
+}
+```
+
+See the [typed-storage README](https://github.com/JeanHaro/typed-storage#-scoped--temporary-storage-with-destroy) for when to use `destroy()` vs `ttl`.
+
+---
+
+## 🧭 Route-based values with `trackRoute()`
+
+If your schema uses `routeOverrides`, connect it to Angular Router automatically — no manual subscription needed:
+
+```typescript
+import { Router } from '@angular/router';
+import { TypedStorageService, trackRoute } from '@jeanharo98/typed-storage-angular';
+
+@Service()
+export class StorageService {
+    storage: AppStorage;
+
+    constructor(private router: Router) {
+        const ts = new TypedStorageService();
+        this.storage = ts.initialize({
+            theme: 'dark' as 'dark' | 'light',
+        }, {
+            prefix: 'app',
+            routeOverrides: {
+                '/': { theme: 'dark' },
+                '/about': { theme: 'light' }
+            }
+        }) as unknown as AppStorage;
+
+        trackRoute(this.storage, this.router);
+        // Now navigating to /about automatically sets theme to 'light',
+        // and navigating to / sets it back to 'dark' — no manual setRoute() calls
+    }
+}
+```
+
+`trackRoute()` subscribes to `router.events`, filters for `NavigationEnd`, and calls `storage.setRoute(event.urlAfterRedirects)` on every navigation. See the [typed-storage README](https://github.com/JeanHaro/typed-storage#-different-values-per-route-with-routeoverrides) for the full `routeOverrides` documentation, including how to remove a key entirely for a specific route using `null`.
+
+---
+
 ## ⚙️ Options
 
 All options from `@jeanharo98/typed-storage` are supported:
@@ -129,7 +187,10 @@ ts.initialize(schema, {
     storage: 'session',     // Use sessionStorage instead of localStorage
     ttl: 3600000,           // Expire after 1 hour
     sync: true,             // Sync across browser tabs
-    encrypt: true,          // Shows security warning (see typed-storage docs)
+    routeOverrides: {       // Different values per route
+        '/checkout': { currency: null }
+    },
+    encrypt: true,          // Requires 'secret' — see typed-storage docs for security notes
 })
 ```
 
@@ -139,7 +200,8 @@ ts.initialize(schema, {
 | `storage` | `'local' \| 'session'` | `'local'` | Storage type |
 | `ttl` | `number` | — | Time to live in milliseconds |
 | `sync` | `boolean` | `false` | Cross-tab sync via StorageEvent |
-| `encrypt` | `boolean` | `false` | Shows security warning |
+| `routeOverrides` | `Record<string, Record<string, any>>` | — | Per-route key values, applied via `setRoute()` / `trackRoute()` |
+| `encrypt` | `boolean` | `false` | Requires `secret` — see [typed-storage security notes](https://github.com/JeanHaro/typed-storage#-encryption-xor-obfuscation) |
 
 ---
 
@@ -161,8 +223,12 @@ TypedStorageService.initialize()
         ├── reset(key)       ← resets to initialValue + updates Signal
         ├── remove(key)      ← removes key from storage + sets Signal to undefined
         ├── has(key)         ← checks if key exists in storage
-        └── clear()          ← clears all keys + updates all Signals
+        ├── clear()          ← clears all keys + updates all Signals
+        ├── destroy()        ← removes ALL keys completely + updates all Signals
+        └── setRoute(route)  ← applies routeOverrides for that route + updates Signals
 ```
+
+`destroy()` and `setRoute()` don't need manual Signal syncing — internally they call `.set()`/`.remove()` on the core signals, which already have `onChange` wired to the Angular Signals from step 2.
 
 ---
 
@@ -190,8 +256,10 @@ Returns an object where each key is a `Signal<T>`, plus the following methods:
 | `remove(key)` | Removes the key from localStorage and sets Signal to `undefined` |
 | `has(key)` | Returns `true` if the key exists in storage |
 | `clear()` | Calls `reset()` on all keys and syncs all Signals |
+| `destroy()` | Completely removes all keys and syncs all Signals |
+| `setRoute(route)` | Applies the `routeOverrides` entry for `route`, if any, and syncs Signals |
 
-#### Difference between `reset()`, `remove()` and `clear()`
+#### Difference between `reset()`, `remove()`, `clear()` and `destroy()`
 
 ```typescript
 // reset(key) — vuelve al initialValue pero mantiene la key en localStorage
@@ -206,8 +274,21 @@ storage.remove('theme');
 
 // clear() — reset() en todas las keys del schema
 storage.clear();
-// todas las keys vuelven a su initialValue
+// todas las keys vuelven a su initialValue, pero SIGUEN existiendo en localStorage
+
+// destroy() — remove() en todas las keys del schema
+storage.destroy();
+// todas las keys DESAPARECEN completamente de localStorage
 ```
+
+### `trackRoute(storage, router)`
+
+Subscribes `storage.setRoute()` to Angular Router navigation events automatically.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `storage` | `{ setRoute(route: string): void }` | Any object exposing `setRoute()` — normally the result of `initialize()` |
+| `router` | `Router` | An injected instance of Angular's `Router` |
 
 ---
 
@@ -219,6 +300,7 @@ storage.clear();
 | Angular Signal | ✅ manual `signal()` | ✅ automatic |
 | Cross-tab sync | ❌ manual `StorageEvent` | ✅ automatic |
 | TTL / expiration | ❌ manual | ✅ built-in |
+| Route-based values | ❌ manual router subscription | ✅ `trackRoute()` |
 | Type safety | ⚠️ partial | ✅ full |
 | Prefix namespacing | ❌ manual | ✅ built-in |
 | Lines of code (4 keys) | ~25 lines | ~5 lines |
@@ -228,9 +310,8 @@ storage.clear();
 ## 🔗 Related
 
 - **[@jeanharo98/typed-storage](https://github.com/JeanHaro/typed-storage)** — Core library (required peer dependency)
-- **[@jeanharo98/typed-storage-react](https://github.com/JeanHaro/typed-storage-react)** — React wrapper 
-- **[typed-storage-devtools](https://github.com/JeanHaro/typed-storage-devtools)** — Chrome DevTools extension for real-time inspection |
-
+- **[@jeanharo98/typed-storage-react](https://github.com/JeanHaro/typed-storage-react)** — React wrapper
+- **[typed-storage-devtools](https://github.com/JeanHaro/typed-storage-devtools)** — Chrome DevTools extension for real-time inspection
 
 ---
 

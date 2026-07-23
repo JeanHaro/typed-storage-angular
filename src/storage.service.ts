@@ -23,6 +23,8 @@ type SignalStorage<T extends StorageSchema> = Record<keyof T, Signal<any>> & {
     remove(key: keyof T): void;
     has(key: keyof T): boolean;  
     clear(): void;
+    destroy(): void;
+    setRoute(route: string): void;
 }
 
 export class TypedStorageService<T extends StorageSchema> {
@@ -79,6 +81,14 @@ export class TypedStorageService<T extends StorageSchema> {
             for ( const k of Object.keys(schema) ) {
                 this._signals[k].set(this._storage[k]()); // Actualizamos todos los signals
             }
+        }
+
+        result.destroy = () => {
+            this._storage.destroy();
+        }
+
+        result.setRoute = ( route: string ) => {
+            this._storage.setRoute(route);
         }
 
         // 4. Retorna el resultado
