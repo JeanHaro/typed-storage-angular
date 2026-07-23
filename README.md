@@ -173,7 +173,47 @@ export class StorageService {
 }
 ```
 
-`trackRoute()` subscribes to `router.events`, filters for `NavigationEnd`, and calls `storage.setRoute(event.urlAfterRedirects)` on every navigation. See the [typed-storage README](https://github.com/JeanHaro/typed-storage#-different-values-per-route-with-routeoverrides) for the full `routeOverrides` documentation, including how to remove a key entirely for a specific route using `null`.
+`trackRoute()` subscribes to `router.events`, filters for `NavigationEnd`, and calls `storage.setRoute(event.urlAfterRedirects)` on every navigation. See the [typed-storage README](https://github.com/JeanHaro/typed-storage#-different-values-per-route-with-routeoverrides) for the full `routeOverrides` documentation, including how to remove a key entirely for a specific route using `null`, and how to apply an override only once with `__once`.
+
+---
+
+## 🧩 Independent storage per page (separate `prefix`, no `trackRoute()`)
+
+`routeOverrides` (with or without `__once`) always operates on **one shared value** across your whole app — it never gives two pages their own truly independent copies of a key. If you instead want `HomeComponent` and `AboutComponent` to each keep their **own** `theme`, completely unaffected by each other, use a separate `TypedStorageService` (or a separate `prefix`) per page instead:
+
+```typescript
+// home-storage.ts — its own isolated service
+@Service()
+export class HomeStorageService {
+    storage: { theme: Signal<'dark' | 'light'>; set(key: string, value: any): void; destroy(): void; };
+
+    constructor() {
+        const ts = new TypedStorageService();
+        this.storage = ts.initialize({
+            theme: 'dark' as 'dark' | 'light'
+        }, { prefix: 'home' }) as any; // stored as 'home:theme'
+    }
+}
+```
+
+```typescript
+// about-storage.ts — a completely separate isolated service
+@Service()
+export class AboutStorageService {
+    storage: { theme: Signal<'dark' | 'light'>; set(key: string, value: any): void; };
+
+    constructor() {
+        const ts = new TypedStorageService();
+        this.storage = ts.initialize({
+            theme: 'light' as 'dark' | 'light'
+        }, { prefix: 'about' }) as any; // stored as 'about:theme'
+    }
+}
+```
+
+`HomeComponent` injects `HomeStorageService`, `AboutComponent` injects `AboutStorageService` — changing one's `theme` never touches the other's, because they're two entirely different `localStorage` keys (`home:theme` and `about:theme`). No `routeOverrides`, no `trackRoute()`, no `__once` needed for this — it's the right tool when true per-page isolation is what you want.
+
+See the [typed-storage README's pattern comparison table](https://github.com/JeanHaro/typed-storage#choosing-the-right-pattern) for a full breakdown of when to use separate `prefix`es vs. `routeOverrides` (with or without `__once`).
 
 ---
 
@@ -200,7 +240,7 @@ ts.initialize(schema, {
 | `storage` | `'local' \| 'session'` | `'local'` | Storage type |
 | `ttl` | `number` | — | Time to live in milliseconds |
 | `sync` | `boolean` | `false` | Cross-tab sync via StorageEvent |
-| `routeOverrides` | `Record<string, Record<string, any>>` | — | Per-route key values, applied via `setRoute()` / `trackRoute()` |
+| `routeOverrides` | `Record<string, Record<string, any> & { __once?: boolean }>` | — | Per-route key values, applied via `setRoute()` / `trackRoute()` |
 | `encrypt` | `boolean` | `false` | Requires `secret` — see [typed-storage security notes](https://github.com/JeanHaro/typed-storage#-encryption-xor-obfuscation) |
 
 ---
