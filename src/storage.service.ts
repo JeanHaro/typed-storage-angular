@@ -17,8 +17,10 @@ import {
     StorageSignalOptions 
 } from '@jeanharo98/typed-storage';
 
-type SignalStorage<T extends StorageSchema> = Record<keyof T, Signal<any>> & {
-    set(key: keyof T, value: any): void;
+type SignalStorage<T extends StorageSchema> = {
+    [K in keyof T]: Signal<T[K]>
+} & {
+    set<K extends keyof T>(key: K, value: T[K]): void;
     reset(key: keyof T): void;
     remove(key: keyof T): void;
     has(key: keyof T): boolean;  
