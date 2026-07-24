@@ -32,11 +32,14 @@ type SignalStorage<T extends StorageSchema> = {
     restore(): Promise<void>;
 }
 
-export class TypedStorageService<T extends StorageSchema> {
+export class TypedStorageService {
     private _storage: any;
     private _signals: any = {};
 
-    initialize ( schema: T, options?: StorageSignalOptions ): SignalStorage<T> {
+    initialize<T extends StorageSchema>( 
+        schema: T, 
+        options?: StorageSignalOptions 
+    ): SignalStorage<T> {
         // 1. Crea el storage core
         this._storage = createStorage(schema, options);
 
