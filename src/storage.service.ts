@@ -76,8 +76,7 @@ export class TypedStorageService {
         }
 
         result.remove = ( key: keyof T ) => {
-            this._storage[key].remove(); // borra del localStorage
-            this._signals[key].set(undefined); // Signal queda undefined
+            this._storage[key].remove(); // borra del localStorage y notifica automaticamente
         }
         
         result.has = (key: keyof T): boolean => {
