@@ -67,12 +67,10 @@ export class TypedStorageService {
         // Agregamos los métodos
         result.set = ( key: keyof T, value: any ) => {
             this._storage[key].set(value); // Actualizamos el storage
-            this._signals[key].set(value); // Actualizamos el signal
         }
 
         result.reset = ( key: keyof T ) => {
             this._storage[key].reset(); // Reseteamos el storage
-            this._signals[key].set(this._storage[key]()); // Actualizamos el signal
         }
 
         result.remove = ( key: keyof T ) => {
@@ -85,9 +83,6 @@ export class TypedStorageService {
 
         result.clear = () => {
             this._storage.clear(); // Limpiamos el storage
-            for ( const k of Object.keys(schema) ) {
-                this._signals[k].set(this._storage[k]()); // Actualizamos todos los signals
-            }
         }
 
         result.destroy = () => {
@@ -100,26 +95,14 @@ export class TypedStorageService {
 
         result.batch = (values: Partial<T>) => {
             this._storage.batch(values); // Actualiza el storage
-            // Sincroniza SOLO los signals de las keys que cambiaron
-            for (const k of Object.keys(values)) {
-                this._signals[k].set(this._storage[k]());
-            }
         }
 
         result.archive = async () => {
-            await this._storage.archive(); // async — mueve todo a IndexedDB
-            // Sincroniza todos los signals — vuelven al initialValue
-            for (const k of Object.keys(schema)) {
-                this._signals[k].set(this._storage[k]());
-            }
+            await this._storage.archive(); // async, mueve todo a IndexedDB
         }
 
         result.restore = async () => {
-            await this._storage.restore(); // async — trae de vuelta desde IndexedDB
-            // Sincroniza todos los signals con los valores restaurados
-            for (const k of Object.keys(schema)) {
-                this._signals[k].set(this._storage[k]());
-            }
+            await this._storage.restore(); // async, trae de vuelta desde IndexedDB
         }
 
         // 4. Retorna el resultado
