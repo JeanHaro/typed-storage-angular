@@ -25,13 +25,16 @@ type SignalStorage<T extends StorageSchema> = Record<keyof T, Signal<any>> & {
     clear(): void;
     destroy(): void;
     setRoute(route: string): void;
+    batch(values: Partial<T>): void;
+    archive(): Promise<void>;
+    restore(): Promise<void>;
 }
 
 export class TypedStorageService<T extends StorageSchema> {
     private _storage: any;
     private _signals: any = {};
 
-    initialize ( schema: T, options: StorageSignalOptions ): SignalStorage<T> {
+    initialize ( schema: T, options?: StorageSignalOptions ): SignalStorage<T> {
         // 1. Crea el storage core
         this._storage = createStorage(schema, options);
 
@@ -89,6 +92,30 @@ export class TypedStorageService<T extends StorageSchema> {
 
         result.setRoute = ( route: string ) => {
             this._storage.setRoute(route);
+        }
+
+        result.batch = (values: Partial<T>) => {
+            this._storage.batch(values); // Actualiza el storage
+            // Sincroniza SOLO los signals de las keys que cambiaron
+            for (const k of Object.keys(values)) {
+                this._signals[k].set(this._storage[k]());
+            }
+        }
+
+        result.archive = async () => {
+            await this._storage.archive(); // async — mueve todo a IndexedDB
+            // Sincroniza todos los signals — vuelven al initialValue
+            for (const k of Object.keys(schema)) {
+                this._signals[k].set(this._storage[k]());
+            }
+        }
+
+        result.restore = async () => {
+            await this._storage.restore(); // async — trae de vuelta desde IndexedDB
+            // Sincroniza todos los signals con los valores restaurados
+            for (const k of Object.keys(schema)) {
+                this._signals[k].set(this._storage[k]());
+            }
         }
 
         // 4. Retorna el resultado

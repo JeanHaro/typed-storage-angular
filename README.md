@@ -30,7 +30,7 @@ export class StorageService {
 - **Zoneless compatible** — works with Angular 22+ zoneless change detection
 - **Type-safe** — full TypeScript support with your own interfaces
 - **`trackRoute()`** — automatic route-based value sync via Angular Router
-- **All typed-storage features** — TTL, cross-tab sync, prefix, sessionStorage, MemoryStorage fallback, `destroy()`, `batch()`, `routeOverrides`
+- **All typed-storage features** — TTL, cross-tab sync, prefix, sessionStorage, MemoryStorage fallback, `destroy()`, `batch()`, `archive()`/`restore()`, `routeOverrides`
 
 ---
 
@@ -65,6 +65,9 @@ interface AppStorage {
     clear(): void;
     destroy(): void;
     setRoute(route: string): void;
+    batch(values: Partial<{ theme: 'dark' | 'light'; language: 'es' | 'en'; fontSize: number; sidebarOpen: boolean }>): void;
+    archive(): Promise<void>;
+    restore(): Promise<void>;
 }
 ```
 
@@ -119,6 +122,58 @@ export class App {
     storageService = inject(StorageService);
 }
 ```
+
+---
+
+## 📦 Batch updates
+
+Update multiple keys in a single call, syncing only the affected Signals:
+
+```typescript
+@Component({
+    template: `
+        <button (click)="save()">Save preferences</button>
+    `
+})
+export class SettingsComponent {
+    storageService = inject(StorageService);
+
+    save(): void {
+        this.storageService.storage.batch({
+            theme: 'light',
+            fontSize: 20
+            // sidebarOpen is not included — stays unchanged
+        });
+    }
+}
+```
+
+See the [typed-storage README](https://github.com/JeanHaro/typed-storage#-batch-updates) for the full documentation.
+
+---
+
+## 📦 Archiving to IndexedDB with `archive()` and `restore()`
+
+Both methods are `async` — free real space in `localStorage` while a page isn't in active use, and bring the data back when needed:
+
+```typescript
+@Component({ selector: 'app-editor' })
+export class EditorComponent implements OnDestroy {
+    storageService = inject(StorageService);
+
+    async ngOnInit(): Promise<void> {
+        await this.storageService.storage.restore();
+        // brings back any previously archived data for this schema
+    }
+
+    async ngOnDestroy(): Promise<void> {
+        await this.storageService.storage.archive();
+        // moves current data to IndexedDB, frees localStorage
+    }
+}
+```
+
+Signals update automatically after both calls resolve — `archive()` resets them to their `initialValue` (since the data moved out of `localStorage`), and `restore()` updates them with whatever was brought back. See the [typed-storage README](https://github.com/JeanHaro/typed-storage#-archiving-data-to-indexeddb-with-archive-and-restore) for the full documentation and how this differs from the automatic quota-exceeded fallback.
 
 ---
 
@@ -230,18 +285,13 @@ ts.initialize(schema, {
     routeOverrides: {       // Different values per route
         '/checkout': { currency: null }
     },
+    validate: {},           // Optional Zod-compatible runtime validation
+    plugins: [],            // Optional lifecycle hooks
     encrypt: true,          // Requires 'secret' — see typed-storage docs for security notes
 })
 ```
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `prefix` | `string` | — | Prepends `prefix:` to every key |
-| `storage` | `'local' \| 'session'` | `'local'` | Storage type |
-| `ttl` | `number` | — | Time to live in milliseconds |
-| `sync` | `boolean` | `false` | Cross-tab sync via StorageEvent |
-| `routeOverrides` | `Record<string, Record<string, any> & { __once?: boolean }>` | — | Per-route key values, applied via `setRoute()` / `trackRoute()` |
-| `encrypt` | `boolean` | `false` | Requires `secret` — see [typed-storage security notes](https://github.com/JeanHaro/typed-storage#-encryption-xor-obfuscation) |
+`initialize()`'s second parameter is entirely optional — it accepts the exact same options as `createStorage()` in the core library. See the [typed-storage README](https://github.com/JeanHaro/typed-storage#%EF%B8%8F-options) for the full list of options.
 
 ---
 
@@ -265,10 +315,13 @@ TypedStorageService.initialize()
         ├── has(key)         ← checks if key exists in storage
         ├── clear()          ← clears all keys + updates all Signals
         ├── destroy()        ← removes ALL keys completely + updates all Signals
-        └── setRoute(route)  ← applies routeOverrides for that route + updates Signals
+        ├── setRoute(route)  ← applies routeOverrides for that route + updates Signals
+        ├── batch(values)    ← updates multiple keys + syncs only affected Signals
+        ├── archive()        ← moves data to IndexedDB + syncs Signals (async)
+        └── restore()        ← brings data back from IndexedDB + syncs Signals (async)
 ```
 
-`destroy()` and `setRoute()` don't need manual Signal syncing — internally they call `.set()`/`.remove()` on the core signals, which already have `onChange` wired to the Angular Signals from step 2.
+`destroy()` and `setRoute()` don't need manual Signal syncing for their underlying `.set()`/`.remove()` calls — those already have `onChange` wired to the Angular Signals from step 2. `batch()`, `archive()`, and `restore()` explicitly re-sync their affected Signals after calling the core methods, since they operate on the core storage directly rather than going through the per-key `set()` wrapper.
 
 ---
 
@@ -298,6 +351,9 @@ Returns an object where each key is a `Signal<T>`, plus the following methods:
 | `clear()` | Calls `reset()` on all keys and syncs all Signals |
 | `destroy()` | Completely removes all keys and syncs all Signals |
 | `setRoute(route)` | Applies the `routeOverrides` entry for `route`, if any, and syncs Signals |
+| `batch(values)` | Updates multiple keys in a single call, syncing only the affected Signals |
+| `archive()` | Moves all schema keys to IndexedDB, removes them from `localStorage`, syncs Signals. Async |
+| `restore()` | Brings archived keys back from IndexedDB into `localStorage`, syncs Signals. Async |
 
 #### Difference between `reset()`, `remove()`, `clear()` and `destroy()`
 
@@ -341,6 +397,8 @@ Subscribes `storage.setRoute()` to Angular Router navigation events automaticall
 | Cross-tab sync | ❌ manual `StorageEvent` | ✅ automatic |
 | TTL / expiration | ❌ manual | ✅ built-in |
 | Route-based values | ❌ manual router subscription | ✅ `trackRoute()` |
+| Batch updates | ❌ manual, one `.set()` per key | ✅ `batch()` |
+| Large data archiving | ❌ manual IndexedDB code | ✅ `archive()` / `restore()` |
 | Type safety | ⚠️ partial | ✅ full |
 | Prefix namespacing | ❌ manual | ✅ built-in |
 | Lines of code (4 keys) | ~25 lines | ~5 lines |

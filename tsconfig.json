@@ -9,6 +9,7 @@
         "emitDecoratorMetadata": true,
         "moduleResolution": "bundler",
         "declaration": true,
+        "removeComments": true,
         "declarationDir": "./dist",
         "outDir": "./dist",
         "rootDir": "./src"
